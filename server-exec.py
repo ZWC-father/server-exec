@@ -16,17 +16,17 @@ def load_config(config_path):
         raise ValueError("Config file must be a list")
     
     for entry in data:
-        required_keys = ["ip", "username", "command", "priority"]
+        required_keys = ["server", "username", "command", "priority"]
         for key in required_keys:
             if key not in entry:
                 raise ValueError(f"Missing field: {key} (entry: {entry})")
         
         # 认证信息检查：密码和密钥至少提供一个
         if "password" not in entry and "password_env" not in entry and "key_path" not in entry:
-            raise ValueError(f"Missing password (password_env) or key_path for {entry.get('ip')}:{entry.get('port',22)}")
+            raise ValueError(f"Missing password (password_env) or key_path for {entry.get('server')}:{entry.get('port',22)}")
         if entry.get("password_env"):
             if not os.environ.get(entry.get("password_env")):
-                raise ValueError(f"No env password for {entry.get('ip')}:{entry.get('port',22)}")
+                raise ValueError(f"No env password for {entry.get('server')}:{entry.get('port',22)}")
             entry["password"] = os.environ.get(entry.get("password_env"))
     
     return data
@@ -34,7 +34,7 @@ def load_config(config_path):
 def execute_remote_command(server_config):
     start_time = time.time();
 
-    ip = server_config.get("ip")
+    server = server_config.get("server")
     port = server_config.get("port", 22)
     username = server_config.get("username")
     password = server_config.get("password")
@@ -48,12 +48,11 @@ def execute_remote_command(server_config):
 
     try:
         # 如果指定了bind_interface，则创建socket手动连接
-        logging.info(f"[{ip}:{port}] Connecting")
         sock = None
         client = None
         
         if bind_address or bind_interface:
-            logging.info(f"[{ip}:{port}] Bind address/interface set, creating socket")
+            logging.info(f"[{server}:{port}] Bind address/interface set, creating socket")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(connect_timeout + 1)
             if bind_address:
@@ -63,22 +62,23 @@ def execute_remote_command(server_config):
                 # 若bind_interface不是IP（可能是网卡名称），尝试绑定网卡
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, bind_interface.encode())
             # 发起 TCP 连接
-            sock.connect((ip, port))
+            sock.connect((server, port))
         
         # 使用 Paramiko 建立 SSH 连接
+        logging.info(f"[{server}:{port}] Connecting")
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         if sock:
             # 使用已有的socket连接
-            client.connect(ip, port=port, username=username, password=password, 
+            client.connect(server, port=port, username=username, password=password, 
                            key_filename=key_path, timeout=connect_timeout, 
                            banner_timeout=connect_timeout, sock=sock)
         else:
-            client.connect(ip, port=port, username=username, password=password, 
+            client.connect(server, port=port, username=username, password=password, 
                            key_filename=key_path, timeout=connect_timeout, 
                            banner_timeout=connect_timeout)
         
-        logging.info(f"[{ip}:{port}] SSH connected, running: {command}")        
+        logging.info(f"[{server}:{port}] SSH connected, running: {command}")        
         stdin, stdout, stderr = client.exec_command(command, timeout=connect_timeout)
 
         channel = stdout.channel
@@ -92,12 +92,12 @@ def execute_remote_command(server_config):
         output = stdout.read().decode('utf-8', errors='ignore')
         error_output = stderr.read().decode('utf-8', errors='ignore')
         
-        logging.info(f"[{ip}:{port}] Exit: {exit_status}")
-        logging.info(f"[{ip}:{port}] Stdout:\n{output}")
-        logging.info(f"[{ip}:{port}] Stderr:\n{error_output}")
+        logging.info(f"[{server}:{port}] Exit: {exit_status}")
+        logging.info(f"[{server}:{port}] Stdout:\n{output}")
+        logging.info(f"[{server}:{port}] Stderr:\n{error_output}")
     except Exception as e:
         # 捕获所有异常，记录错误信息
-        logging.warning(f"[{ip}:{port}] Exception: {e}")
+        logging.warning(f"[{server}:{port}] Exception: {e}")
         success = True
     finally:
         # 清理SSH客户端和socket
@@ -110,8 +110,8 @@ def execute_remote_command(server_config):
     
     end_time = time.time();
     if success:
-        return f"[{ip}:{port}] Something wrong, took {end_time-start_time} sec"
-    return f"[{ip}:{port}] Done, took {end_time-start_time} sec"
+        return f"[{server}:{port}] Something wrong, took {end_time-start_time} sec"
+    return f"[{server}:{port}] Done, took {end_time-start_time} sec"
 
 
 def run_ssh_commands(config_path):

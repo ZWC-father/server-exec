@@ -9,7 +9,7 @@ It was developed for shutting down my Homelab servers/routers/switches initially
 ```
 [
   {
-    "ip": "blog.xhyh.me",
+    "server": "blog.xhyh.me",
     "port": 22,
     "username": "root",
     "password": "12345678",
@@ -20,7 +20,7 @@ It was developed for shutting down my Homelab servers/routers/switches initially
     "command_timeout": 10
   },
   {
-    "ip": "127.0.0.1",
+    "server": "127.0.0.1",
     "port": 2222,
     "username": "xhyh",
     "password_env": "YJX",
@@ -30,7 +30,7 @@ It was developed for shutting down my Homelab servers/routers/switches initially
     "command_timeout": 514
   },
   {
-    "ip": "10.1.1.10",
+    "server": "10.1.1.10",
     "username": "root",,
     "key_path": "~/.ssh/id_ed25519"
     "command": "sudo pacman -Syu",
