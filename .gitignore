@@ -171,4 +171,5 @@ cython_debug/
 .pypirc
 
 # for safety
+main.py
 *.json

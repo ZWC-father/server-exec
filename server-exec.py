@@ -13,20 +13,20 @@ def load_config(config_path):
         data = json.load(f)
     
     if not isinstance(data, list):
-        raise ValueError("配置文件的顶层结构必须是列表")
+        raise ValueError("Config file must be a list")
     
     for entry in data:
         required_keys = ["ip", "username", "command", "priority"]
         for key in required_keys:
             if key not in entry:
-                raise ValueError(f"配置缺少必需字段: {key} (条目: {entry})")
+                raise ValueError(f"Missing field: {key} (entry: {entry})")
         
         # 认证信息检查：密码和密钥至少提供一个
         if "password" not in entry and "password_env" not in entry and "key_path" not in entry:
-            raise ValueError(f"{entry.get('ip')} 未提供密码或密钥路径")
+            raise ValueError(f"Missing password (password_env) or key_path for {entry.get('ip')}:{entry.get('port',22)}")
         if entry.get("password_env"):
             if not os.environ.get(entry.get("password_env")):
-                raise ValueError(f"环境变量中没有 {entry.get('ip')} 的密码")
+                raise ValueError(f"No env password for {entry.get('ip')}:{entry.get('port',22)}")
             entry["password"] = os.environ.get(entry.get("password_env"))
     
     return data
@@ -40,6 +40,7 @@ def execute_remote_command(server_config):
     password = server_config.get("password")
     key_path = server_config.get("key_path")
     command = server_config.get("command")
+    bind_address = server_config.get("bind_address")
     bind_interface = server_config.get("bind_interface")
     connect_timeout = server_config.get("connect_timeout", 10)
     command_timeout = server_config.get("command_timeout", 10)
@@ -47,23 +48,21 @@ def execute_remote_command(server_config):
 
     try:
         # 如果指定了bind_interface，则创建socket手动连接
-        logging.info(f"[{ip}:{port}] 尝试连接")
+        logging.info(f"[{ip}:{port}] Connecting")
         sock = None
         client = None
         
-        if bind_interface:
-            logging.info(f"[{ip}:{port}] 设置了绑定接口, 尝试通过socket连接")
+        if bind_address or bind_interface:
+            logging.info(f"[{ip}:{port}] Bind address/interface set, creating socket")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(connect_timeout)
-            try:
-                # 尝试将bind_interface当作IP地址绑定
-                socket.inet_aton(bind_interface)  # 验证是否为有效IP
-                sock.bind((bind_interface, 0))
-            except OSError:
+            sock.settimeout(connect_timeout + 1)
+            if bind_address:
+                socket.inet_aton(bind_address)  # 验证是否为有效IP
+                sock.bind((bind_address, 0))
+            else:
                 # 若bind_interface不是IP（可能是网卡名称），尝试绑定网卡
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, bind_interface.encode())
             # 发起 TCP 连接
-            sock.settimeout(connect_timeout + 1)
             sock.connect((ip, port))
         
         # 使用 Paramiko 建立 SSH 连接
@@ -78,20 +77,27 @@ def execute_remote_command(server_config):
             client.connect(ip, port=port, username=username, password=password, 
                            key_filename=key_path, timeout=connect_timeout, 
                            banner_timeout=connect_timeout)
-        logging.info(f"[{ip}:{port}] SSH连接已建立, 执行命令: {command}")
         
-        stdin, stdout, stderr = client.exec_command(command, timeout=command_timeout)
+        logging.info(f"[{ip}:{port}] SSH connected, running: {command}")        
+        stdin, stdout, stderr = client.exec_command(command, timeout=connect_timeout)
+
+        channel = stdout.channel
+        cmd_start_time = time.time()
+        while not channel.exit_status_ready():
+            if time.time() - cmd_start_time > command_timeout:
+                raise TimeoutError(f"Command timeout, exceeded {command_timeout} sec")
+            time.sleep(0.1)
         
         exit_status = stdout.channel.recv_exit_status()
         output = stdout.read().decode('utf-8', errors='ignore')
         error_output = stderr.read().decode('utf-8', errors='ignore')
         
-        logging.info(f"[{ip}:{port}] 命令返回值: {exit_status}")
-        logging.info(f"[{ip}:{port}] 命令标准输出:\n{output}")
-        logging.info(f"[{ip}:{port}] 命令标准错误输出:\n{error_output}")
+        logging.info(f"[{ip}:{port}] Exit: {exit_status}")
+        logging.info(f"[{ip}:{port}] Stdout:\n{output}")
+        logging.info(f"[{ip}:{port}] Stderr:\n{error_output}")
     except Exception as e:
         # 捕获所有异常，记录错误信息
-        logging.warning(f"[{ip}:{port}] 出现异常: {e}")
+        logging.warning(f"[{ip}:{port}] Exception: {e}")
         success = True
     finally:
         # 清理SSH客户端和socket
@@ -104,8 +110,8 @@ def execute_remote_command(server_config):
     
     end_time = time.time();
     if success:
-        return f"[{ip}:{port}] 命令执行有错误, 用时 {end_time-start_time} 秒"
-    return f"[{ip}:{port}] 命令已执行, 用时 {end_time-start_time} 秒"
+        return f"[{ip}:{port}] Something wrong, took {end_time-start_time} sec"
+    return f"[{ip}:{port}] Done, took {end_time-start_time} sec"
 
 
 def run_ssh_commands(config_path):
@@ -123,7 +129,7 @@ def run_ssh_commands(config_path):
 
     # 顺序执行各优先级组
     for i, prio in enumerate(sorted_prios):
-        logging.info(f"========== 开始执行优先级 {prio} 组 ==========")
+        logging.info(f"=============== Start group {prio} ===============")
         # 并发执行当前优先级组内的所有服务器命令
         group = priority_groups[prio]
         futures = []
@@ -133,7 +139,7 @@ def run_ssh_commands(config_path):
                 futures.append(executor.submit(execute_remote_command, server))
             for future in as_completed(futures):
                 results.append(future.result())
-        logging.info(f"==== 优先级 {prio} 组执行完毕,统计信息如下 ====")
+        logging.info(f"==== Group {prio} done, Statistics as follows ====")
         for entry in results:
             logging.info(entry)
     
@@ -153,7 +159,7 @@ def main():
     try:
         run_ssh_commands(sys.argv[1])
     except Exception as e:
-        logging.error(f"无法处理的异常: {e}", exc_info=True)
+        logging.error(f"Unhandled exception: {e}", exc_info=True)
         raise
 
 
