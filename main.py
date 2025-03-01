@@ -1,4 +1,5 @@
 import os
+import sys
 import paramiko
 import socket
 import json
@@ -46,11 +47,12 @@ def execute_remote_command(server_config):
 
     try:
         # 如果指定了bind_interface，则创建socket手动连接
-        logging.info(f"[{ip}] 尝试连接")
+        logging.info(f"[{ip}:{port}] 尝试连接")
         sock = None
         client = None
         
         if bind_interface:
+            logging.info(f"[{ip}:{port}] 设置了绑定接口, 尝试通过socket连接")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(connect_timeout)
             try:
@@ -76,7 +78,7 @@ def execute_remote_command(server_config):
             client.connect(ip, port=port, username=username, password=password, 
                            key_filename=key_path, timeout=connect_timeout, 
                            banner_timeout=connect_timeout)
-        logging.info(f"[{ip}] SSH连接已建立，开始执行命令")
+        logging.info(f"[{ip}:{port}] SSH连接已建立, 执行命令: {command}")
         
         # 执行远程命令
         stdin, stdout, stderr = client.exec_command(command, timeout=command_timeout)
@@ -86,12 +88,12 @@ def execute_remote_command(server_config):
         output = stdout.read().decode('utf-8', errors='ignore')
         error_output = stderr.read().decode('utf-8', errors='ignore')
         
-        logging.info(f"[{ip}] 命令返回值： {exit_status}")
-        logging.info(f"[{ip}] 命令标准输出:\n{output}")
-        logging.info(f"[{ip}] 命令标准错误输出：\n{error_output}")
+        logging.info(f"[{ip}:{port}] 命令返回值: {exit_status}")
+        logging.info(f"[{ip}:{port}] 命令标准输出:\n{output}")
+        logging.info(f"[{ip}:{port}] 命令标准错误输出:\n{error_output}")
     except Exception as e:
         # 捕获所有异常，记录错误信息
-        logging.warning(f"[{ip}] 出现异常: {e}")
+        logging.warning(f"[{ip}:{port}] 出现异常: {e}")
         success = True
     finally:
         # 清理SSH客户端和socket
@@ -104,8 +106,8 @@ def execute_remote_command(server_config):
     
     end_time = time.time();
     if success:
-        return f"[{ip}] 命令执行有错误，用时 {end_time-start_time} 秒"
-    return f"[{ip}] 命令已执行，用时 {end_time-start_time} 秒"
+        return f"[{ip}:{port}] 命令执行有错误, 用时 {end_time-start_time} 秒"
+    return f"[{ip}:{port}] 命令已执行, 用时 {end_time-start_time} 秒"
 
 
 def run_ssh_commands(config_path):
@@ -123,7 +125,7 @@ def run_ssh_commands(config_path):
 
     # 顺序执行各优先级组
     for i, prio in enumerate(sorted_prios):
-        logging.info(f"=== 开始执行优先级 {prio} 组 ===")
+        logging.info(f"========== 开始执行优先级 {prio} 组 ==========")
         # 并发执行当前优先级组内的所有服务器命令
         group = priority_groups[prio]
         futures = []
@@ -133,18 +135,27 @@ def run_ssh_commands(config_path):
                 futures.append(executor.submit(execute_remote_command, server))
             for future in as_completed(futures):
                 results.append(future.result())
-        logging.info(f"=== 优先级 {prio} 组执行完毕,统计信息如下 ===")
-        logging.info(results);
-        # 在不同优先级组之间等待（如果有配置等待时间）
+        logging.info(f"==== 优先级 {prio} 组执行完毕,统计信息如下 ====")
+        for entry in results:
+            logging.info(entry)
     
 
 def main():
-    logging.basicConfig(filename='ssh_automation.log', level=logging.INFO,
+    if len(sys.argv) != 2:
+        print("Usage: python server-exec.py <config file>")
+        sys.exit(1);
+    
+    logging.basicConfig(filename='ssh_automation.log', filemode='w', level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.getLogger("paramiko").disabled = True
+    logging.getLogger("paramiko.transport").disabled = True
+    logging.getLogger("concurrent").setLevel(logging.CRITICAL);
+    logging.getLogger("concurrent.futures").setLevel(logging.CRITICAL);
+
     try:
-        run_ssh_commands('config.json')
+        run_ssh_commands(sys.argv[1])
     except Exception as e:
-        logging.error(f"无法处理的异常：{e}", exc_info=True)
+        logging.error(f"无法处理的异常: {e}", exc_info=True)
         raise
 
 
