@@ -22,7 +22,7 @@ It was developed for shutting down my Homelab servers/routers/switches initially
   {
     "server": "127.0.0.1",
     "port": 2222,
-    "username": "xhyh",
+    "username": "wty",
     "password_env": "YJX",
     "command": "bash ak_ioi.sh",
     "priority": 1,
@@ -31,8 +31,8 @@ It was developed for shutting down my Homelab servers/routers/switches initially
   },
   {
     "server": "10.1.1.10",
-    "username": "root",,
-    "key_path": "~/.ssh/id_ed25519"
+    "username": "root",
+    "key_path": "/home/xhyh/.ssh/id_ed25519"
     "command": "sudo pacman -Syu",
     "priority": 2,
     "bind_address": "10.1.1.20",
