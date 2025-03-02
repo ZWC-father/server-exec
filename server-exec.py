@@ -120,7 +120,8 @@ def execute_remote_command(server_config):
         success = True
     finally:
         with suppress(Exception):
-            os.environ.pop(server_config.get("password_env"))
+            if server_config.get("password_env"):
+                os.environ.pop(server_config.get("password_env"))
             if client:
                 client.close()
             if 'sock' in locals() and sock:
@@ -166,7 +167,7 @@ def main():
         print("Usage: python server-exec.py <config file>")
         sys.exit(1);
     
-    logging.basicConfig(filename='ssh_automation.log', filemode='w', level=logging.INFO,
+    logging.basicConfig(filename='automation.log', filemode='w', level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s')
     logging.getLogger("paramiko").disabled = True
     logging.getLogger("paramiko.transport").disabled = True

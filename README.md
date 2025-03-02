@@ -23,7 +23,7 @@ It was developed for shutting down my Homelab servers/routers/switches initially
     "server": "127.0.0.1",
     "port": 2222,
     "username": "wty",
-    "password_env": "YJX",
+    "password_env": "SERVER_PASSWORD",
     "command": "bash ak_ioi.sh",
     "priority": 1,
     "connect_timeout": 114,
