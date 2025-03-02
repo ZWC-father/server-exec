@@ -9,14 +9,35 @@ from contextlib import suppress
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def load_config(config_path):
+    config_fields = {
+        "server": str,
+        "port": int,
+        "username": str,
+        "password": str,
+        "password_env": str,
+        "key_path": str,
+        "command": str,
+        "priority": int,
+        "bind_address": str,
+        "bind_interface": str,
+        "connect_timeout": (int, float),
+        "command_timeout": (int, float),
+    }
+
     with open(config_path, 'r') as f:
         data = json.load(f)
     
     if not isinstance(data, list):
         raise ValueError("Config file must be a list")
-    
+        
     for entry in data:
-        required_keys = ["server", "username", "command", "priority"]
+        for key in entry:
+            if key not in config_fields:
+                raise KeyError(f"Unknown field: {key} (entry: {entry})")
+            if not isinstance(entry[key], config_fields[key]):
+                raise TypeError(f"Field type invalid: {key} (entry: {entry})")
+
+        required_keys = ["server", "username", "command"]
         for key in required_keys:
             if key not in entry:
                 raise ValueError(f"Missing field: {key} (entry: {entry})")
@@ -61,7 +82,6 @@ def execute_remote_command(server_config):
             else:
                 # 若bind_interface不是IP（可能是网卡名称），尝试绑定网卡
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, bind_interface.encode())
-            # 发起 TCP 连接
             sock.connect((server, port))
         
         # 使用 Paramiko 建立 SSH 连接
@@ -96,11 +116,9 @@ def execute_remote_command(server_config):
         logging.info(f"[{server}:{port}] Stdout:\n{output}")
         logging.info(f"[{server}:{port}] Stderr:\n{error_output}")
     except Exception as e:
-        # 捕获所有异常，记录错误信息
         logging.warning(f"[{server}:{port}] Exception: {e}")
         success = True
     finally:
-        # 清理SSH客户端和socket
         with suppress(Exception):
             os.environ.pop(server_config.get("password_env"))
             if client:
@@ -120,14 +138,13 @@ def run_ssh_commands(config_path):
     # 按优先级排序服务器列表
     servers.sort(key=lambda x: x.get("priority", 0))
    
-   # 根据优先级分组服务器
+    # 根据优先级分组服务器
     priority_groups = {}
     for server in servers:
         prio = server.get("priority", 0)
         priority_groups.setdefault(prio, []).append(server)
     sorted_prios = sorted(priority_groups.keys())
 
-    # 顺序执行各优先级组
     for i, prio in enumerate(sorted_prios):
         logging.info(f"=============== Start group {prio} ===============")
         # 并发执行当前优先级组内的所有服务器命令
