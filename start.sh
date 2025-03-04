@@ -1,7 +1,4 @@
 #!/bin/bash
-export $SERVER_PASSWORD='afiQXlcWX(p*(N#Xpn2xc'
+export SERVER_PASSWORD='admin12345'
 
 python server-exec.py config.json
-
-unset SERVER_PASSWORD
-

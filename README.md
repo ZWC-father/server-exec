@@ -42,3 +42,4 @@ It was developed for shutting down my Homelab servers/routers/switches initially
   }
 ]
 ```
+**Notice:** You can use `./start.sh` (It's an example) to start the script and don't forget to export env password.
