@@ -198,12 +198,13 @@ if __name__ == "__main__":
     logging.getLogger("paramiko.transport").disabled = True
     logging.getLogger("concurrent").setLevel(logging.CRITICAL)
     logging.getLogger("concurrent.futures").setLevel(logging.CRITICAL)
-    logging.addHandler(logging.StreamHandler(sys.stdout))
-    logging.addHandler(logging.FileHandler("automation.log", encoding="utf-8"))
+    console_handler = logging.StreamHandler(sys.stdout)
+    file_handler = logging.FileHandler("automation.log", encoding="utf-8")
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[console_handler, file_handler],
     )
 
     try:
