@@ -173,7 +173,7 @@ def run_ssh_commands(config_path):
         priority_groups.setdefault(prio, []).append(server)
     sorted_prios = sorted(priority_groups.keys())
 
-    for i, prio in enumerate(sorted_prios):
+    for _, prio in enumerate(sorted_prios):
         logging.info(f"=============== Start group {prio} ===============")
         # 并发执行当前优先级组内的所有服务器命令
         group = priority_groups[prio]
@@ -194,16 +194,17 @@ if __name__ == "__main__":
         print("Usage: python server-exec.py <config file>")
         sys.exit(1)
 
-    logging.basicConfig(
-        filename="automation.log",
-        filemode="w",
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-    )
     logging.getLogger("paramiko").disabled = True
     logging.getLogger("paramiko.transport").disabled = True
     logging.getLogger("concurrent").setLevel(logging.CRITICAL)
     logging.getLogger("concurrent.futures").setLevel(logging.CRITICAL)
+    logging.addHandler(logging.StreamHandler(sys.stdout))
+    logging.addHandler(logging.FileHandler("automation.log", encoding="utf-8"))
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
     try:
         run_ssh_commands(sys.argv[1])
